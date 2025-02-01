@@ -31,7 +31,7 @@ def get_enriched_sentiment_summary(aggregated_news: List[Dict], symbol: str) -> 
             sentiment = "negative"
         else:
             sentiment = "neutral"
-        confidence = 0.99  # Calibrated confidence score
+        confidence = 0.99
         return confidence, sentiment, summary
     except Exception as e:
         logging.error(f"Error calling Google Gemini API: {e}")

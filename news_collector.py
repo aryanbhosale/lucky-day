@@ -1,11 +1,21 @@
 import os
 import datetime
 import logging
+import time
 import requests
-
 from eventregistry import EventRegistry, QueryArticlesIter
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+# Cache dictionary with TTL (seconds)
+NEWS_CACHE = {}
+CACHE_TTL = 300  # 5 minutes
+
+def parse_timestamp_from_string(time_str, fmt="%Y-%m-%dT%H:%M:%SZ"):
+    try:
+        return datetime.datetime.strptime(time_str, fmt)
+    except Exception:
+        return None
 
 def get_news_from_finnhub(symbol: str, start: str, end: str):
     api_key = os.getenv("FINNHUB_API_KEY")
@@ -13,26 +23,21 @@ def get_news_from_finnhub(symbol: str, start: str, end: str):
         logging.error("Finnhub API key not found.")
         return []
     url = "https://finnhub.io/api/v1/company-news"
-    params = {
-        "symbol": symbol,
-        "from": start,
-        "to": end,
-        "token": api_key
-    }
+    params = {"symbol": symbol, "from": start, "to": end, "token": api_key}
     try:
         response = requests.get(url, params=params, timeout=10)
         response.raise_for_status()
         data = response.json()
         news_items = []
         for item in data:
-            headline = item.get("headline")
-            time_stamp = item.get("datetime")
-            try:
-                published_at = datetime.datetime.utcfromtimestamp(time_stamp)
-            except Exception:
-                published_at = None
+            published_at = None
+            if "datetime" in item:
+                try:
+                    published_at = datetime.datetime.utcfromtimestamp(item["datetime"])
+                except Exception:
+                    published_at = None
             news_items.append({
-                "headline": headline,
+                "headline": item.get("headline"),
                 "timestamp": published_at,
                 "source": "Finnhub"
             })
@@ -48,25 +53,14 @@ def get_news_from_eventregistry(symbol: str, start: str, end: str):
         logging.error("EventRegistry API key not found.")
         return []
     er = EventRegistry(apiKey=api_key)
-    # Use the symbol as keyword; adjust as needed (e.g. converting a symbol to a company name)
-    q = QueryArticlesIter(
-        keywords=symbol,
-        dateStart=start,
-        dateEnd=end,
-        lang="eng"
-    )
+    q = QueryArticlesIter(keywords=symbol, dateStart=start, dateEnd=end, lang="eng")
     try:
         articles = q.execQuery(er, sortBy="date", maxItems=100)
         news_items = []
         for art in articles:
-            headline = art.get("title")
-            date_str = art.get("date")
-            try:
-                published_at = datetime.datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%SZ")
-            except Exception:
-                published_at = None
+            published_at = parse_timestamp_from_string(art.get("date"))
             news_items.append({
-                "headline": headline,
+                "headline": art.get("title"),
                 "timestamp": published_at,
                 "source": "EventRegistry"
             })
@@ -95,14 +89,9 @@ def get_news_from_marketaux(symbol: str, start: str, end: str):
         data = response.json()
         news_items = []
         for article in data.get("data", []):
-            headline = article.get("title")
-            time_str = article.get("published_at")
-            try:
-                published_at = datetime.datetime.strptime(time_str, "%Y-%m-%dT%H:%M:%SZ")
-            except Exception:
-                published_at = None
+            published_at = parse_timestamp_from_string(article.get("published_at"))
             news_items.append({
-                "headline": headline,
+                "headline": article.get("title"),
                 "timestamp": published_at,
                 "source": "MarketAux"
             })
@@ -113,18 +102,24 @@ def get_news_from_marketaux(symbol: str, start: str, end: str):
         return []
 
 def get_aggregated_news(symbol: str, start: str, end: str):
+    global NEWS_CACHE
+    cache_key = (symbol, start, end)
+    now = time.time()
+    if cache_key in NEWS_CACHE and now - NEWS_CACHE[cache_key]["timestamp"] < CACHE_TTL:
+        logging.info("Returning cached aggregated news data.")
+        return NEWS_CACHE[cache_key]["data"]
     news = []
     news.extend(get_news_from_finnhub(symbol, start, end))
     news.extend(get_news_from_eventregistry(symbol, start, end))
     news.extend(get_news_from_marketaux(symbol, start, end))
     unique_news = {}
     for item in news:
-        headline = item.get("headline")
-        if headline and headline not in unique_news:
-            unique_news[headline] = item
+        if item.get("headline") and item.get("headline") not in unique_news:
+            unique_news[item["headline"]] = item
     aggregated_news = list(unique_news.values())
     aggregated_news.sort(key=lambda x: x["timestamp"] if x["timestamp"] else datetime.datetime.min, reverse=True)
     logging.info(f"Aggregated a total of {len(aggregated_news)} unique news items.")
+    NEWS_CACHE[cache_key] = {"timestamp": now, "data": aggregated_news}
     return aggregated_news
 
 if __name__ == "__main__":
