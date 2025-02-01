@@ -13,33 +13,41 @@ from utils import estimate_sentiment
 from chatgpt_client import get_enriched_sentiment_summary
 from rl_agent import DQNAgent
 
-# Clear existing credentials from environment (if needed)
+os.environ["ABSL_MIN_LOG_LEVEL"] = "3"
+
+# Clear any old credentials from environment
 for key in ["ALPACA_API_KEY", "ALPACA_API_SECRET", "ALPACA_BASE_URL",
             "FINNHUB_API_KEY", "EVENTREGISTRY_API_KEY", "MARKETAUX_KEY",
-            "GEMINIAI_API_KEY", "GEMINI_API_URL"]:
+            "GEMINIAI_API_KEY", "GEMINI_API_URL", "MARKET_INDEX"]:
     os.environ.pop(key, None)
 
 load_dotenv()
 
+# Broker credentials
 API_KEY = os.getenv("ALPACA_API_KEY")
 API_SECRET = os.getenv("ALPACA_API_SECRET")
 BASE_URL = os.getenv("ALPACA_BASE_URL")
+ALPACA_CREDS = {"API_KEY": API_KEY, "API_SECRET": API_SECRET, "PAPER": True}
 
-ALPACA_CREDS = {
-    "API_KEY": API_KEY,
-    "API_SECRET": API_SECRET,
-    "PAPER": True
+# Mapping for Indian market indices (Yahoo Finance tickers)
+INDEX_TICKERS = {
+    "nifty50": "^NSEI",
+    "niftybank": "^NSEBANK",
+    "sensex": "^BSESN"
 }
+# Choose the index to trade; default to "nifty50" if not provided
+MARKET_CHOICE = os.getenv("MARKET_INDEX", "nifty50").lower()
+SYMBOL = INDEX_TICKERS.get(MARKET_CHOICE, "^NSEI")
 
 logging.basicConfig(level=logging.INFO)
 
 class MLTrader(Strategy):
-    def initialize(self, symbol: str = "SPY", cash_at_risk: float = 0.5):
+    def initialize(self, symbol: str = SYMBOL, cash_at_risk: float = 0.5):
         self.symbol = symbol
         self.sleeptime = "24H"
         self.cash_at_risk = cash_at_risk
         self.api = REST(base_url=BASE_URL, key_id=API_KEY, secret_key=API_SECRET)
-        # RL agent with state: [sentiment prob, sentiment value, price momentum, current position]
+        # State: [sentiment probability, sentiment value, price momentum, current position]
         self.rl_agent = DQNAgent(state_size=4, action_size=3)
         self.prev_state = None
         self.prev_price = None
@@ -62,7 +70,6 @@ class MLTrader(Strategy):
         aggregated_news = get_aggregated_news(self.symbol, three_days_prior, today)
         probability_f, sentiment_f = estimate_sentiment(aggregated_news)
         probability_c, sentiment_c, enriched_summary = get_enriched_sentiment_summary(aggregated_news, self.symbol)
-        # Ensemble: if both agree, average; else choose dominant confidence, else neutral
         if sentiment_f == sentiment_c:
             combined_probability = (probability_f + probability_c) / 2.0
             combined_sentiment = sentiment_f
@@ -81,6 +88,7 @@ class MLTrader(Strategy):
         return combined_probability, combined_sentiment
 
     def compute_state(self, last_price, sentiment_probability, sentiment_label):
+        # Encode sentiment numerically: positive=1, negative=-1, neutral=0.
         sentiment_value = 1 if sentiment_label == "positive" else (-1 if sentiment_label == "negative" else 0)
         price_momentum = ((last_price - self.prev_price) / self.prev_price) if self.prev_price and self.prev_price > 0 else 0.0
         return [sentiment_probability, sentiment_value, price_momentum, self.current_position]
@@ -104,25 +112,25 @@ class MLTrader(Strategy):
         if cash > last_price:
             if action == 1 and self.current_position != 1:
                 if self.current_position == -1:
-                    self.sell_all()  # Cover short
+                    self.sell_all()  # Cover short.
                 order = self.create_order(self.symbol, quantity, "buy", type="market")
                 self.submit_order(order)
                 self.current_position = 1
             elif action == 2 and self.current_position != -1:
                 if self.current_position == 1:
-                    self.sell_all()  # Exit long
+                    self.sell_all()  # Exit long.
                 order = self.create_order(self.symbol, quantity, "sell", type="market")
                 self.submit_order(order)
                 self.current_position = -1
-            # Else, hold (action == 0)
-
+            # Else, hold.
+        
         self.prev_state = current_state
         self.prev_price = last_price
         self.prev_action = action
 
-start_date = datetime(2020, 1, 1)
-end_date = datetime(2023, 12, 31)
+start_date = datetime(2024, 1, 1)
+end_date = datetime(2024, 3, 1)
 
 broker = Alpaca(ALPACA_CREDS)
-strategy = MLTrader(name="mlstrat", broker=broker, parameters={"symbol": "SPY", "cash_at_risk": 0.5})
-strategy.backtest(YahooDataBacktesting, start_date, end_date, parameters={"symbol": "SPY", "cash_at_risk": 0.5})
+strategy = MLTrader(name="mlstrat", broker=broker, parameters={"symbol": SYMBOL, "cash_at_risk": 0.5})
+strategy.backtest(YahooDataBacktesting, start_date, end_date, parameters={"symbol": SYMBOL, "cash_at_risk": 0.5})

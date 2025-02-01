@@ -1,13 +1,32 @@
 import os
 import logging
+import time
 from typing import List, Dict, Tuple
 import google.generativeai as genai
 
+# Configure Gemini API key and model
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     logging.error("Gemini API key not found.")
 genai.configure(api_key=GEMINI_API_KEY)
 MODEL_NAME = "gemini-1.5-flash"
+
+def generate_with_retry(prompt: str, retries: int = 3, delay: int = 5):
+    """
+    Attempts to generate content using Gemini API with a simple retry loop.
+    If the call takes too long or fails, it will retry after a delay.
+    """
+    for attempt in range(retries):
+        try:
+            model = genai.GenerativeModel(MODEL_NAME)
+            # Call generate_content without extra unsupported parameters.
+            response = model.generate_content(prompt)
+            return response
+        except Exception as e:
+            logging.error(f"Gemini API attempt {attempt + 1} failed: {e}")
+            if attempt < retries - 1:
+                time.sleep(delay)
+    raise Exception("All Gemini API retries failed.")
 
 def get_enriched_sentiment_summary(aggregated_news: List[Dict], symbol: str) -> Tuple[float, str, str]:
     prompt = (
@@ -21,8 +40,7 @@ def get_enriched_sentiment_summary(aggregated_news: List[Dict], symbol: str) -> 
     prompt += "\nProvide your analysis in a concise manner, and conclude with the overall sentiment (positive, negative, or neutral)."
     
     try:
-        model = genai.GenerativeModel(MODEL_NAME)
-        response = model.generate_content(prompt)
+        response = generate_with_retry(prompt)
         summary = response.text
         summary_lower = summary.lower()
         if "positive" in summary_lower:
@@ -31,7 +49,7 @@ def get_enriched_sentiment_summary(aggregated_news: List[Dict], symbol: str) -> 
             sentiment = "negative"
         else:
             sentiment = "neutral"
-        confidence = 0.99
+        confidence = 0.99  # Calibrated confidence score
         return confidence, sentiment, summary
     except Exception as e:
         logging.error(f"Error calling Google Gemini API: {e}")

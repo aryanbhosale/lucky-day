@@ -7,15 +7,9 @@ from eventregistry import EventRegistry, QueryArticlesIter
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-# Cache dictionary with TTL (seconds)
+# Cache dictionary with TTL in seconds
 NEWS_CACHE = {}
 CACHE_TTL = 300  # 5 minutes
-
-def parse_timestamp_from_string(time_str, fmt="%Y-%m-%dT%H:%M:%SZ"):
-    try:
-        return datetime.datetime.strptime(time_str, fmt)
-    except Exception:
-        return None
 
 def get_news_from_finnhub(symbol: str, start: str, end: str):
     api_key = os.getenv("FINNHUB_API_KEY")
@@ -30,12 +24,10 @@ def get_news_from_finnhub(symbol: str, start: str, end: str):
         data = response.json()
         news_items = []
         for item in data:
-            published_at = None
-            if "datetime" in item:
-                try:
-                    published_at = datetime.datetime.utcfromtimestamp(item["datetime"])
-                except Exception:
-                    published_at = None
+            try:
+                published_at = datetime.datetime.utcfromtimestamp(item.get("datetime"))
+            except Exception:
+                published_at = None
             news_items.append({
                 "headline": item.get("headline"),
                 "timestamp": published_at,
@@ -58,7 +50,11 @@ def get_news_from_eventregistry(symbol: str, start: str, end: str):
         articles = q.execQuery(er, sortBy="date", maxItems=100)
         news_items = []
         for art in articles:
-            published_at = parse_timestamp_from_string(art.get("date"))
+            published_at = None
+            try:
+                published_at = datetime.datetime.strptime(art.get("date"), "%Y-%m-%dT%H:%M:%SZ")
+            except Exception:
+                pass
             news_items.append({
                 "headline": art.get("title"),
                 "timestamp": published_at,
@@ -76,20 +72,18 @@ def get_news_from_marketaux(symbol: str, start: str, end: str):
         logging.error("MarketAux API key not found.")
         return []
     url = "https://api.marketaux.com/v1/news/all"
-    params = {
-        "api_token": api_key,
-        "symbols": symbol,
-        "published_after": start,
-        "published_before": end,
-        "language": "en"
-    }
+    params = {"api_token": api_key, "symbols": symbol, "published_after": start, "published_before": end, "language": "en"}
     try:
         response = requests.get(url, params=params, timeout=10)
         response.raise_for_status()
         data = response.json()
         news_items = []
         for article in data.get("data", []):
-            published_at = parse_timestamp_from_string(article.get("published_at"))
+            published_at = None
+            try:
+                published_at = datetime.datetime.strptime(article.get("published_at"), "%Y-%m-%dT%H:%M:%SZ")
+            except Exception:
+                pass
             news_items.append({
                 "headline": article.get("title"),
                 "timestamp": published_at,
@@ -114,7 +108,7 @@ def get_aggregated_news(symbol: str, start: str, end: str):
     news.extend(get_news_from_marketaux(symbol, start, end))
     unique_news = {}
     for item in news:
-        if item.get("headline") and item.get("headline") not in unique_news:
+        if item.get("headline") and item["headline"] not in unique_news:
             unique_news[item["headline"]] = item
     aggregated_news = list(unique_news.values())
     aggregated_news.sort(key=lambda x: x["timestamp"] if x["timestamp"] else datetime.datetime.min, reverse=True)
@@ -125,7 +119,7 @@ def get_aggregated_news(symbol: str, start: str, end: str):
 if __name__ == "__main__":
     from dotenv import load_dotenv
     load_dotenv()
-    symbol = "AAPL"
+    symbol = "AAPL"  # For testing, can be changed
     start = "2023-01-01"
     end = "2023-01-07"
     news = get_aggregated_news(symbol, start, end)

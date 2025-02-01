@@ -10,7 +10,7 @@ labels = ["positive", "negative", "neutral"]
 
 def estimate_sentiment(news_items):
     """
-    Batch-process headlines for sentiment estimation.
+    Batch processes headlines using FinBERT.
     Applies exponential recency decay and source credibility weighting.
     """
     if not news_items:
@@ -20,12 +20,8 @@ def estimate_sentiment(news_items):
     weights = []
     now = datetime.datetime.utcnow()
     total_weight = 0.0
-    source_credibility = {
-        "Finnhub": 0.9,
-        "NewsAPI": 0.8,
-        "MarketAux": 0.7,
-        "EventRegistry": 0.8
-    }
+    # Adjust credibility as needed.
+    source_credibility = {"Finnhub": 0.9, "NewsAPI": 0.8, "MarketAux": 0.7, "EventRegistry": 0.8}
     alpha_decay = 0.1
 
     for item in news_items:
@@ -42,10 +38,9 @@ def estimate_sentiment(news_items):
         weights.append(weight)
         total_weight += weight
 
-    # Batch tokenize all headlines
+    # Batch tokenize headlines.
     tokens = tokenizer(headlines, return_tensors="pt", padding=True, truncation=True).to(device)
     logits = model(tokens["input_ids"], attention_mask=tokens["attention_mask"])["logits"]
-    # Multiply each headline's logits by its weight
     weights_tensor = torch.tensor(weights, device=device).unsqueeze(1)
     aggregated_logits = torch.sum(logits * weights_tensor, dim=0) / total_weight
     aggregated_softmax = torch.nn.functional.softmax(aggregated_logits, dim=-1)
