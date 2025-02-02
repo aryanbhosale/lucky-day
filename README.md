@@ -83,7 +83,7 @@ The RL agent employs a Deep Q-Network (DQN) to learn an optimal trading policy. 
 * Price momentum calculated from price changes.
 * Current position (long, short, or flat).
 
-For an in-depth introduction to DQN and reinforcement learning in trading, see this [overview of deep reinforcement learning for trading](https://www.quantstart.com/articles/Deep-Reinforcement-Learning-in-Algorithmic-Trading).
+For an in-depth introduction to DQN and reinforcement learning in trading, see this [overview of deep reinforcement learning for trading](https://blog.mlq.ai/deep-reinforcement-learning-trading-strategies-automl/).
 
 ---
 
