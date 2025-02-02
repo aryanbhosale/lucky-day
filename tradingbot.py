@@ -128,9 +128,9 @@ class MLTrader(Strategy):
         self.prev_price = last_price
         self.prev_action = action
 
-start_date = datetime(2024, 1, 1)
-end_date = datetime(2024, 3, 1)
+start_date = datetime(2024, 10, 1)
+end_date = datetime(2025, 2, 1)
 
 broker = Alpaca(ALPACA_CREDS)
 strategy = MLTrader(name="mlstrat", broker=broker, parameters={"symbol": SYMBOL, "cash_at_risk": 0.5})
-strategy.backtest(YahooDataBacktesting, start_date, end_date, parameters={"symbol": SYMBOL, "cash_at_risk": 0.5})
+strategy.backtest(YahooDataBacktesting, start_date, end_date, parameters={"symbol": SYMBOL, "cash_at_risk": 0.5}, benchmark_asset="^NSEI")
