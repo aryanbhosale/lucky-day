@@ -186,6 +186,6 @@ The strategy uses the `YahooDataBacktesting` module from Lumibot to simulate tra
 
 * [FinBERT on Hugging Face](https://huggingface.co/ProsusAI/finbert)
 * [Google Generative AI](https://developers.generativeai.google/)
-* [Deep Reinforcement Learning for in Algorithmic Trading]([https://www.quantstart.com/articles/Deep-Reinforcement-Learning-in-Algorithmic-Trading](https://blog.mlq.ai/deep-reinforcement-learning-trading-strategies-automl/))
+* [Deep Reinforcement Learning for in Algorithmic Trading](https://blog.mlq.ai/deep-reinforcement-learning-trading-strategies-automl/)
 * [Alpaca Trading API](https://alpaca.markets/docs/)
 * [Lumibot Backtesting and Trading](https://github.com/lumibot/lumibot)
